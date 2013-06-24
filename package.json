@@ -1,0 +1,23 @@
+{
+  "name": "energyserver",
+  "version": "0.0.0",
+  "description": "energyserver ============",
+  "main": "index.js",
+  "dependencies": {
+    "mongoose": "~3.6.14",
+    "express": "~3.3.3",
+    "async": "~0.2.9"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/mbrindam/energyserver.git"
+  },
+  "author": "",
+  "license": "BSD",
+  "readmeFilename": "README.md",
+  "gitHead": "845f70fa14a6c6be438695a546120097ab0ebea6"
+}
