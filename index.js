@@ -46,19 +46,18 @@ var nesmeter = mongoose.Schema({
 
 });
 
-var meterreads2 = mongoose.Schema({
+var ecnmeterlist = mongoose.Schema({
 	_id : {
 		type : String,
 		unique : true,
 		index : true
 	},
 	meterId: { type: String },
-	consumption: { type: Number },
-	date: { type: Date }
+	lastread: { type: Date }
 });
 
 var NesMeter = db.model('nesmeters', nesmeter);
-var Meters = db.model('meterreads2', meterreads2);
+var Meters = db.model('meterreads', ecnmeterlist);
 
 //Routes
 app.get('/cmlp/meterreadsapi/locations', function(req, res)
@@ -148,9 +147,11 @@ app.get('/cmlp/meterreadsapi/locations', function(req, res)
 
 app.get('/cmlp/meterreadsapi', function(req, res) {
 
-	var queryData = url.parse(req.url, true).query;
+    var queryData = url.parse(req.url, true).query;
 	var meters = {};
 	var list = [];
+	var mlocs = {};
+	var mtyps = {};
 	var q = {};
 	if (typeof queryData.type !== "undefined") {
 		if (queryData.type === "usage") {
@@ -196,7 +197,9 @@ app.get('/cmlp/meterreadsapi', function(req, res) {
 
 	console.log('meterreads2 - %j', q);
 
-	Meters.find({}, function(err, mreads) {
+	async.series([
+	              function (callback) {
+	Meters.find(q).sort({'date': -1}).limit(1000).execFind(function(err,mreads){
 		if (err) {
 			res.json({
 				'status' : 'failure',
@@ -210,7 +213,16 @@ app.get('/cmlp/meterreadsapi', function(req, res) {
 
 				for (var i in mreads) {
 					console.log('EcnMeter: %j', mreads[i]);
+					mlocs[mreads[i].meterId] = 'unknown';
+					mtyps[mreads[i].meterId] = 'unknown';
+					var latlong = mreads[i].loc;
+					
+					
+					
 				}
+				
+				meters['mtyps'] = mtyps;
+				meters['mlocs'] = mlocs;
 
 				res.setHeader('Content-Type', 'application/json');
 				res.setHeader('Access-Control-Allow-Origin', '*');
@@ -224,6 +236,8 @@ app.get('/cmlp/meterreadsapi', function(req, res) {
 		res.end();
 
 	});
+    callback();
+}]);
 });
 
 var port = process.env.PORT || 5550;
