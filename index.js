@@ -46,18 +46,38 @@ var nesmeter = mongoose.Schema({
 
 });
 
-var ecnmeterlist = mongoose.Schema({
+var meterreads2 = mongoose.Schema({
 	_id : {
 		type : String,
 		unique : true,
 		index : true
 	},
 	meterId: { type: String },
-	lastread: { type: Date }
+	lastread: { type: Date },
+	date: { type: Date }
+}, { collection: 'meterreads2' });
+
+var meterlocation = mongoose.Schema({
+	meterId: { type: String },
+	type: { type: String },
+	meter_num: { type: String },
+	account: { type: String },
+	unit_num: { type: String },
+	loc: [],
+	address: { type: String },
+	_id: {
+		type : String,
+		unique : true,
+		index : true
+	}
 });
 
+mongoose.set('debug', true);
+
 var NesMeter = db.model('nesmeters', nesmeter);
-var Meters = db.model('meterreads', ecnmeterlist);
+var Meters = db.model('meterreads2', meterreads2);
+var MeterLocations = db.model('meterlocations', meterlocation);
+
 
 //Routes
 app.get('/cmlp/meterreadsapi/locations', function(req, res)
@@ -191,53 +211,98 @@ app.get('/cmlp/meterreadsapi', function(req, res) {
 			res.json(
 					meters
 			);
+			res.end();
+			return;
 		}
 
 	}
 
 	console.log('meterreads2 - %j', q);
 
-	async.series([
-	              function (callback) {
+	//async.series([
+	//              function (callback) {
 	Meters.find(q).sort({'date': -1}).limit(1000).execFind(function(err,mreads){
 		if (err) {
+			console.log(err);
 			res.json({
 				'status' : 'failure',
 				'error' : err
 			});
+			res.end();
+			return;
 		} else {
 			console.log("ecnmeters: %j", mreads);
 			if (mreads) {
 
 				meters['list'] = list;
+				var pending = 0;
 
 				for (var i in mreads) {
+					pending++;
 					console.log('EcnMeter: %j', mreads[i]);
 					mlocs[mreads[i].meterId] = 'unknown';
 					mtyps[mreads[i].meterId] = 'unknown';
 					var latlong = mreads[i].loc;
 					
-					
+					(function(curmeter, curindex) {
+						MeterLocations.findOne({ meterId: mreads[curindex].meterId}, function(err, mloc) {
+							/*if (err) {
+								//errors.e404(req, rsp, db);
+								meters['list'] = list;
+								var json = JSON.stringify(meters);
+
+								rsp.writeHead(200, { 'Content-Type': 'application/json', 'content-length':json.length,
+									'Access-Control-Allow-Origin' : '*', 'Access-Control-Allow-Headers': 'X-Requested-With'});
+								rsp.write(json);
+								rsp.end();
+								return;
+							}*/
+							pending--;
+							if (!err && mloc) {
+								//console.log("mloc: %j, curmeter: %j, pending: %d", mloc, curmeter, pending)
+								mlocs[mloc.meterId] = mloc.address;
+								mtyps[mloc.meterId] = mloc.type;
+								var meter = new Meter(mloc.meterId, mloc.loc, mloc.meterId, curmeter.lastread);
+								list.push(meter); //[mreads[i].meterId] = meter;
+							}
+
+							if (pending == 0) {
+								console.log("responding");
+								res.setHeader('Content-Type', 'application/json');
+								res.setHeader('Access-Control-Allow-Origin', '*');
+								res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
+								res.json(
+										meters
+								);
+								res.end();
+								
+								/*var json = JSON.stringify(meters);
+
+								rsp.writeHead(200, { 'Content-Type': 'application/json', 'content-length':json.length,
+									'Access-Control-Allow-Origin' : '*', 'Access-Control-Allow-Headers': 'X-Requested-With'});
+								rsp.write(json);
+								rsp.end();*/
+
+
+							}
+						});
+					})(mreads[i], i);
 					
 				}
 				
-				meters['mtyps'] = mtyps;
-				meters['mlocs'] = mlocs;
-
-				res.setHeader('Content-Type', 'application/json');
-				res.setHeader('Access-Control-Allow-Origin', '*');
-				res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
-				res.json(
-						meters
-				);
+				/*meters['mtyps'] = mtyps;
+				meters['mlocs'] = mlocs;*/
 			}
 		}
-
-		res.end();
-
 	});
-    callback();
-}]);
+//    callback();
+//}],
+// [
+//function (callback) {
+//  var pending = 0;
+//  for (i=0;i<mreads.length)
+//}
+// ]);
 });
 
 var port = process.env.PORT || 5550;
