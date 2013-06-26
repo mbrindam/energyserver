@@ -72,7 +72,7 @@ var meterlocation = mongoose.Schema({
 	}
 });
 
-mongoose.set('debug', true);
+//mongoose.set('debug', true);
 
 var NesMeter = db.model('nesmeters', nesmeter);
 var Meters = db.model('meterreads2', meterreads2);
@@ -217,7 +217,7 @@ app.get('/cmlp/meterreadsapi', function(req, res) {
 
 	}
 
-	console.log('meterreads2 - %j', q);
+	//console.log('meterreads2 - %j', q);
 
 	//async.series([
 	//              function (callback) {
@@ -231,7 +231,7 @@ app.get('/cmlp/meterreadsapi', function(req, res) {
 			res.end();
 			return;
 		} else {
-			console.log("ecnmeters: %j", mreads);
+			//console.log("ecnmeters: %j", mreads);
 			if (mreads) {
 
 				meters['list'] = list;
@@ -239,24 +239,17 @@ app.get('/cmlp/meterreadsapi', function(req, res) {
 
 				for (var i in mreads) {
 					pending++;
-					console.log('EcnMeter: %j', mreads[i]);
+					//console.log('EcnMeter: %j', mreads[i]);
 					mlocs[mreads[i].meterId] = 'unknown';
 					mtyps[mreads[i].meterId] = 'unknown';
 					var latlong = mreads[i].loc;
 					
 					(function(curmeter, curindex) {
 						MeterLocations.findOne({ meterId: mreads[curindex].meterId}, function(err, mloc) {
-							/*if (err) {
+							if (err) {
+								console.log("warn: %j", err);
 								//errors.e404(req, rsp, db);
-								meters['list'] = list;
-								var json = JSON.stringify(meters);
-
-								rsp.writeHead(200, { 'Content-Type': 'application/json', 'content-length':json.length,
-									'Access-Control-Allow-Origin' : '*', 'Access-Control-Allow-Headers': 'X-Requested-With'});
-								rsp.write(json);
-								rsp.end();
-								return;
-							}*/
+							}
 							pending--;
 							if (!err && mloc) {
 								//console.log("mloc: %j, curmeter: %j, pending: %d", mloc, curmeter, pending)
@@ -267,7 +260,7 @@ app.get('/cmlp/meterreadsapi', function(req, res) {
 							}
 
 							if (pending == 0) {
-								console.log("responding");
+								//console.log("responding");
 								res.setHeader('Content-Type', 'application/json');
 								res.setHeader('Access-Control-Allow-Origin', '*');
 								res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
