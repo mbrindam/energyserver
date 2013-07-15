@@ -4,6 +4,8 @@
 
 var express = require('express'), mongoose = require('mongoose'), async = require('async'), url = require('url');
 
+require('mongoose-long')(mongoose);
+
 var app = express();
 
 var errors = require('./lib/errors');
@@ -73,6 +75,13 @@ function Stats(min, max, avg) {
         this.avg = avg;
 }
 
+function Location(meterId, loc, address) {
+	this.meterId = meterId;
+	this.loc = loc;
+	this.address = address;
+}
+
+var SchemaTypes = mongoose.Schema.Types;
 
 // mongo schemas
 var nesbill = mongoose.Schema({
@@ -82,7 +91,26 @@ var nesbill = mongoose.Schema({
         index : true
     },
     DeviceId : { type: String },
-    DateTime : { type: Date }
+    DateTime : { type: Date },
+    SumOfTiers: 
+    { DifferenceForwardReverseActive: {type: SchemaTypes.Long},
+      ErrorCounter: {type: SchemaTypes.Long},
+      ExportReactive: {type: SchemaTypes.Long},
+      ForwardActive: {type: SchemaTypes.Long},
+      ImportReactive: {type: SchemaTypes.Long},
+      PowerOutageMinutes: {type: SchemaTypes.Long},
+      PowerOutageSeconds: {type: SchemaTypes.Long},
+      PowerOutages: {type: SchemaTypes.Long},
+      PulseInput1: {type: SchemaTypes.Long},
+      PulseInput2: {type: SchemaTypes.Long},
+      ReverseActive: {type: SchemaTypes.Long},
+      SumForwardReverseActive: {type: SchemaTypes.Long},
+      _id : {
+          type : String,
+          unique : true,
+          index : true
+      }
+    }
 } , { collection: 'nesbill' });
 
 var nesmeter = mongoose.Schema({
@@ -100,6 +128,9 @@ var nesmeter = mongoose.Schema({
 	},
 	lastread : {
 		type : Date
+	},
+	Id: {
+		type : String
 	}
 
 });
@@ -308,11 +339,12 @@ app.get('/cmlp/meterreadsapi/view', function(req, res) {
 				processErtMeterData(MeterDetail,mreads, MeterLocations, res);
 			}
 			else {
+				console.log("Searching nesmeters for id: " + meterId);
 			    q = { Id: meterId };
 			    
-			    nesmeters.findOne(q).execFind( function( err, nesmeter) {
+			    NesMeter.findOne(q).execFind( function( err, nesmeter) {
 			        if (!err && nesmeter) {
-			            processNesMeterData(nesmeter, start, end, res);
+			            processNesMeterData(nesmeter, meterId, start, end, res);
 			        }
 			        else {
 			             console.log("404 in nesmeters.findOne()");
@@ -535,11 +567,12 @@ function processErtMeterData(meterreads, mreads, meterlocations, res) {
 	});
 }
 
-function processNesMeterData(nesmeter, start, end) {
-	q = { DeviceId: meterid, DateTime: {"$gte": start, "$lte": end}};
+function processNesMeterData(nesmeter, meterId, start, end, res) {
+	console.log("processNesMeterData, nesmeter: " + nesmeter);
+	q = { DeviceId: meterId, DateTime: {"$gte": start, "$lte": end}};
 	qholder = { query: q, meter: nesmeter };
 	
-	/*nesbill.find(qholder.query).sort({'date':1}).toArray( function(err, mreads) {
+	NesBill.find(qholder.query).sort({'date':1}).execFind( function(err, mreads) {
 
 		if (!err && mreads.length) 
 		{
@@ -553,20 +586,29 @@ function processNesMeterData(nesmeter, start, end) {
 			var theDay = '';
 			var theDayObj;
 			var j=0;
+			console.log("mreads.length: " + mreads.length);
+			
 			for (var i =0; i<mreads.length; i++) {
-				theDay = mreads[i].DateTime.toString().substr(0,3);
-				theDayObj = mreads[i].DateTime;
-				var curconsumption = mreads[i].SumOfTiers.SumForwardReverseActive;
+				
+				var mreading = mreads[i];
+				//console.log("mread: " + mreads[i]);
+				if (mreading && mreading.SumOfTiers) {
+					//console.log("mread: " + mreads[i]);
+					
+					theDay = mreading.DateTime.toString().substr(0,3);
+					theDayObj = mreading.DateTime;
+					var curconsumption = mreading.SumOfTiers.SumForwardReverseActive;
 
-				if (theDay != prevDay) {
-					mdates[j] = theDayObj; //theDay+' '+(mreads[i].DateTime.getMonth()+1)+'/'+(mreads[i].DateTime.getDate());
-					if (prevConsumption) {
-						mdelts[j-1] = (curconsumption - prevConsumption)/100;
+					if (theDay != prevDay) {
+						mdates[j] = theDayObj; //theDay+' '+(mreads[i].DateTime.getMonth()+1)+'/'+(mreads[i].DateTime.getDate());
+						if (prevConsumption) {
+							mdelts[j-1] = (curconsumption - prevConsumption)/100;
+						}
+						j++;
+						prevConsumption = curconsumption;
+						prevDay = theDay;
+						prevDayObj = theDayObj;
 					}
-					j++;
-					prevConsumption = curconsumption;
-					prevDay = theDay;
-					prevDayObj = theDayObj;
 				}
 			}
 			mdelts[j-1] = (curconsumption - prevConsumption)/100;
@@ -597,20 +639,30 @@ function processNesMeterData(nesmeter, start, end) {
 				list.push(cr);
 			}
 
-			var loc = [qholder.meter.Loc.Latitude, qholder.meter.Loc.Longitude];
-			var locobj = new Location(qholder.meter.Id, loc, "");
+			console.log("qholder: " + JSON.stringify(qholder.meter));
+			var loc = [qholder.meter[0].Loc.Latitude, qholder.meter[0].Loc.Longitude];
+			var locobj = new Location(qholder.meter[0].Id, loc, "");
 			var consdata = new ConsumptionData(qholder.meter.Id, qholder.meter.Name, locobj, list, 
 					new Stats(new StatRecord(mindate, minval), new StatRecord(maxdate, maxval), avg));
-			var json = JSON.stringify(consdata);
+			//var json = JSON.stringify(consdata);
 
-			rsp.writeHead(200, { 'Content-Type': 'application/json', 'content-length':json.length,
+			/*rsp.writeHead(200, { 'Content-Type': 'application/json', 'content-length':json.length,
 				'Access-Control-Allow-Origin' : '*', 'Access-Control-Allow-Headers': 'X-Requested-With'});
 			rsp.write(json);
 			rsp.end();
-
+*/
+			res.setHeader('Content-Type', 'application/json');
+			res.setHeader('Access-Control-Allow-Origin', '*');
+			res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
+			res.json(
+					consdata
+			);
+			res.end();
+			
 		}
 		else {
 			return errors.e404(req, rsp, db);
-		}*/
-		};
+		}
+		})
+};
 		
