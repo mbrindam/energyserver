@@ -21,13 +21,69 @@ if (process.env.MONGOLAB_URI) {
 	var db = mongoose.createConnection('localhost', 'cmlp');
 }
 
-/* Return structure for meter */
+
 function Meter(meterId, latlong, name, lastread) {
-	this.meterId = meterId;
-	this.latlong = latlong;
-	this.name = name;
-	this.lastread = lastread;
+        this.meterId = meterId;
+        this.latlong = latlong;
+        this.name = name;
+        this.lastread = lastread;
 }
+
+
+function PQData(meterId, name, loc, freq, current, voltage, freqstats, currentstats, voltagestats) {
+        this.meterId = meterId;
+        this.name = name;
+        this.loc = loc;
+        this.freq = freq;
+        this.current = current;
+        this.voltage = voltage
+        this.freqstats = freqstats;
+        this.currentstats = currentstats;
+        this.voltagestats = voltagestats;
+}
+
+function ConsumptionRecord(name, data) {
+        this.name = name;
+        this.data = data;
+}
+
+function ConsumptionData(meterId, name, loc, consrec, stats) {
+        this.meterId = meterId;
+        this.name = name;
+        this.loc = loc;
+        this.consrec = consrec;
+        this.stats = stats;
+}
+
+function SingleConsumptionRecord(meterId, type, value, date) {
+        this.meterId = meterId;
+        this.meterType = type;
+        this.value = value;
+        this.date = date;
+}
+
+function StatRecord(date, value) {
+        this.date = date;
+        this.value = value;
+}
+
+function Stats(min, max, avg) {
+        this.min = min;
+        this.max = max;
+        this.avg = avg;
+}
+
+
+// mongo schemas
+var nesbill = mongoose.Schema({
+    _id : {
+        type : String,
+        unique : true,
+        index : true
+    },
+    DeviceId : { type: String },
+    DateTime : { type: Date }
+} , { collection: 'nesbill' });
 
 var nesmeter = mongoose.Schema({
 	_id : {
@@ -86,12 +142,15 @@ var meterread = mongoose.Schema({
 	}
 }, { collection: 'meterreads' });
 
+
+
 //mongoose.set('debug', true);
 
 var NesMeter = db.model('nesmeters', nesmeter);
 var Meters = db.model('meterreads2', meterreads2);
 var MeterLocations = db.model('meterlocations', meterlocation);
 var MeterDetail = db.model('meterreads', meterread);
+var NesBill = db.model('nesbill', nesbill);
 
 
 //Routes
@@ -245,8 +304,21 @@ app.get('/cmlp/meterreadsapi/view', function(req, res) {
 				'error' : err
 			});
 		} else {
-			if (mreads) {
-				processErtMeterData(MeterDetail,mreads, MeterLocations);
+			if (mreads && mreads.length) {
+				processErtMeterData(MeterDetail,mreads, MeterLocations, res);
+			}
+			else {
+			    q = { Id: meterId };
+			    
+			    nesmeters.findOne(q).execFind( function( err, nesmeter) {
+			        if (!err && nesmeter) {
+			            processNesMeterData(nesmeter, start, end, res);
+			        }
+			        else {
+			             console.log("404 in nesmeters.findOne()");
+			             return errors.e404(req, res, db);
+			         }
+			    });
 			}
 		}
 	});
@@ -395,7 +467,7 @@ app.listen(port, function() {
 });
 
 
-function processErtMeterData(meterreads, mreads, meterlocations) {
+function processErtMeterData(meterreads, mreads, meterlocations, res) {
 	var list =[];
 	var prevConsumption=0;
 	var mdelts = [];
@@ -464,13 +536,10 @@ function processErtMeterData(meterreads, mreads, meterlocations) {
 }
 
 function processNesMeterData(nesmeter, start, end) {
-	var nesbill = db.collection('nesbill');
-
-	/*start = new Date();
-	start.setDate(start.getDate()-14);*/
 	q = { DeviceId: meterid, DateTime: {"$gte": start, "$lte": end}};
 	qholder = { query: q, meter: nesmeter };
-	nesbill.find(qholder.query).sort({'date':1}).toArray( function(err, mreads) {
+	
+	/*nesbill.find(qholder.query).sort({'date':1}).toArray( function(err, mreads) {
 
 		if (!err && mreads.length) 
 		{
@@ -542,6 +611,6 @@ function processNesMeterData(nesmeter, start, end) {
 		}
 		else {
 			return errors.e404(req, rsp, db);
-		}});
-
-}
+		}*/
+		};
+		
