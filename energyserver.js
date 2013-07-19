@@ -81,12 +81,12 @@ function Location(meterId, loc, address) {
 	this.address = address;
 }
 
-var SchemaTypes = mongoose.Schema.Types;
+var SchemaTypes = mongoose.SchemaTypes;
 
 //mongo schemas
 var nesinstantpower = mongoose.Schema({
 	_id : {
-		type : String,
+		type : SchemaTypes.ObjectId,
 		unique : true,
 		index : true
 	},
@@ -105,7 +105,7 @@ var nesinstantpower = mongoose.Schema({
 	         RmsCurrent: { type: Number },
 	         RmsVoltage: { type: Number },
 	         _id : {
-	     		type : String,
+	     		type : SchemaTypes.ObjectId,
 	     		unique : true,
 	     		index : true
 	     	}
@@ -116,7 +116,7 @@ var nesinstantpower = mongoose.Schema({
 
 var nesbill = mongoose.Schema({
 	_id : {
-		type : String,
+		type : SchemaTypes.ObjectId,
 		unique : true,
 		index : true
 	},
@@ -137,7 +137,7 @@ var nesbill = mongoose.Schema({
 		ReverseActive: {type: SchemaTypes.Long},
 		SumForwardReverseActive: {type: SchemaTypes.Long},
 		_id : {
-			type : String,
+			type : SchemaTypes.ObjectId,
 			unique : true,
 			index : true
 		}
@@ -146,7 +146,7 @@ var nesbill = mongoose.Schema({
 
 var nesmeter = mongoose.Schema({
 	_id : {
-		type : String,
+		type : SchemaTypes.ObjectId,
 		unique : true,
 		index : true
 	},
@@ -168,12 +168,13 @@ var nesmeter = mongoose.Schema({
 
 var meterreads2 = mongoose.Schema({
 	_id : {
-		type : String,
+		type : SchemaTypes.ObjectId,
 		unique : true,
 		index : true
 	},
 	meterId: { type: String },
 	lastread: { type: Date },
+	lastreadval: { type: Number },
 	date: { type: Date }
 }, { collection: 'meterreads2' });
 
@@ -186,7 +187,7 @@ var meterlocation = mongoose.Schema({
 	loc: [],
 	address: { type: String },
 	_id: {
-		type : String,
+		type : SchemaTypes.ObjectId,
 		unique : true,
 		index : true
 	}
@@ -198,7 +199,7 @@ var meterread = mongoose.Schema({
 	date: { type: Date },
 	type: { type: String },
 	_id: {
-		type : String,
+		type : SchemaTypes.ObjectId,
 		unique : true,
 		index : true
 	}
@@ -206,9 +207,10 @@ var meterread = mongoose.Schema({
 
 
 
-//mongoose.set('debug', true);
+mongoose.set('debug', true);
 
 var NesMeter = db.model('nesmeters', nesmeter);
+var NesMeterIndexed = db.model('nesmeters', nesmeter);
 var Meters = db.model('meterreads2', meterreads2);
 var MeterLocations = db.model('meterlocations', meterlocation);
 var MeterDetail = db.model('meterreads', meterread);
@@ -272,6 +274,7 @@ app.get('/cmlp/meterreadsapi/locations', function(req, res)
 
 	NesMeter.find(q, function(err, mreads) {
 		if (err) {
+			res.setHeader('Cache-Control', 'no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0');
 			res.json({
 				'status' : 'failure',
 				'error' : err
@@ -285,7 +288,7 @@ app.get('/cmlp/meterreadsapi/locations', function(req, res)
 					var meter = new Meter(mreads[i]._id, mreads[i].Loc, mreads[i].Name, mreads[i].lastread);
 					list.push(meter); 
 				}
-
+				res.setHeader('Cache-Control', 'no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0');
 				res.setHeader('Content-Type', 'application/json');
 				res.setHeader('Access-Control-Allow-Origin', '*');
 				res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
@@ -460,6 +463,148 @@ app.get('/cmlp/meterreadsapi/view', function(req, res) {
 	});
 });
 
+app.get('/cmlp/meterreadsapi/neslastreadproc', function(req, res) {
+	//NesMeterIndexed.index("_id", {unique: true, dropDups: true});
+	
+	var meters = {};
+	var list = [];
+	var pending = 0;
+	
+	NesMeter.find().execFind( function (err, mreads) {
+		if (err || !mreads || !mreads.length) {
+			res.setHeader('Content-Type', 'application/json');
+			res.setHeader('Access-Control-Allow-Origin', '*');
+			res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
+			
+			res.json({
+				'status' : 'true', 'error' : err 
+			});
+			res.end();
+		} else {
+			if (mreads && mreads.length) {
+				meters['list'] = list;
+				for (i=0;i<mreads.length; i++) {
+					pending++;
+					(function(curindex){
+						NesBill.find({DeviceId: mreads[curindex]._id}).sort({'DateTime':-1}).limit(1).execFind( function (err, mreads1) {
+							if (err || !mreads1.length) { pending--; } //return errors.e404(req, rsp, db);
+							else {
+								meters['list'] = list;
+								for (j=0; j<mreads1.length; j++) {
+									var meter = mreads[curindex];
+									var lastreadDate = mreads1[j].DateTime;
+									meter.lastread = lastreadDate;
+									meter.lastreadval = mreads1[j].SumOfTiers.SumForwardReverseActive;
+									meter.save(function (err) {
+										if (err) console.log("couldn't update lastread for meter: " + meter.meterId);
+									});
+
+									pending--;
+								}
+							}
+
+							if (pending <= 0) {
+
+								var status = [];
+								status['status'] = 'true';
+								var json = JSON.stringify(status);
+
+								res.setHeader('Content-Type', 'application/json');
+								res.setHeader('Access-Control-Allow-Origin', '*');
+								res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
+								
+								res.json(
+									json );
+								res.end();
+							}
+
+						});
+					})(i);
+
+					
+					
+				}
+				
+				
+				res.setHeader('Content-Type', 'application/json');
+				res.setHeader('Access-Control-Allow-Origin', '*');
+				res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
+				
+				
+			}
+		}
+	});
+});
+
+
+app.get('/cmlp/meterreadsapi/lastreadproc', function(req, res) {	
+	var mlocs = {};
+	var meters = {};
+	var list = [];
+	
+	Meters.find().sort({'date': -1}).limit(1000).execFind( function (err, mreads) {
+		if (err || !mreads || !mreads.length) {
+			return errors.e404(req, res);
+			/*res.setHeader('Content-Type', 'application/json');
+			res.setHeader('Access-Control-Allow-Origin', '*');
+			res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
+			
+			res.json({
+				'status' : 'true', 'error' : err 
+			});
+			res.end();*/
+		} 
+		
+		meters['list'] = list;
+		var pending=0;
+		for (i=0; i<mreads.length; i++) {
+			pending++;
+			mlocs[mreads[i].meterId] = 'unknown';
+			
+			curmeter = mreads[i];
+			(function(curindex){
+				MeterDetail.find({meterId: mreads[curindex].meterId, 'type': {$exists: true}}).sort({'date':-1}).limit(1).execFind( function(err, mreads1) {
+					if (err || !mreads1.length) { pending--; } //return errors.e404(req, rsp, db);
+					else {
+						meters['list'] = list;
+						for (j=0; j<mreads1.length; j++) {
+							var meter = mreads[curindex];
+							var lastreadDate = mreads1[j].date;
+							meter.lastread = lastreadDate;
+							meter.lastreadval = mreads1[j].consumption;
+							//console.log(mreads1[j].meterId + " Type: " + mreads1[j].type);
+							meter.type = mreads1[j].type;
+							meter.save(function (err) {
+								if (err) console.log("couldn't update lastread for meter: " + meter.meterId);
+							});
+
+							pending--;
+
+
+						}
+					}
+
+					if (pending <= 0) {
+
+						var status = [];
+						status['status'] = 'true';
+						var json = JSON.stringify(status);
+
+						res.setHeader('Content-Type', 'application/json');
+						res.setHeader('Access-Control-Allow-Origin', '*');
+						res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
+						
+						res.json(
+							json );
+						res.end();
+					}
+
+				});
+			})(i);		
+	}});
+});
+
+
 app.get('/cmlp/meterreadsapi', function(req, res) {
 
 	var queryData = url.parse(req.url, true).query;
@@ -500,6 +645,7 @@ app.get('/cmlp/meterreadsapi', function(req, res) {
 			};
 		} else if (queryData.type === "quality") {
 			meters['list'] = list;
+			res.setHeader('Cache-Control', 'no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0');
 			res.setHeader('Content-Type', 'application/json');
 			res.setHeader('Access-Control-Allow-Origin', '*');
 			res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
@@ -547,6 +693,7 @@ app.get('/cmlp/meterreadsapi', function(req, res) {
 							}
 
 							if (pending == 0) {
+								res.setHeader('Cache-Control', 'no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0');
 								res.setHeader('Content-Type', 'application/json');
 								res.setHeader('Access-Control-Allow-Origin', '*');
 								res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
