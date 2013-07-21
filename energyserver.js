@@ -38,7 +38,7 @@ function PQData(meterId, name, loc, freq, current, voltage, freqstats, currentst
 	this.loc = loc;
 	this.freq = freq;
 	this.current = current;
-	this.voltage = voltage
+	this.voltage = voltage;
 	this.freqstats = freqstats;
 	this.currentstats = currentstats;
 	this.voltagestats = voltagestats;
@@ -98,20 +98,20 @@ var nesinstantpower = mongoose.Schema({
 	Frequency: { type: Number },
 	ImportReactive: { type: Number },
 	Phases: [ {
-	         Id: { type: String },
-	         Name: { type: String },
-	         PhaseAngle: { type: Number },
-	         PowerFactor: { type: Number },
-	         RmsCurrent: { type: Number },
-	         RmsVoltage: { type: Number },
-	         _id : {
-	     		type : SchemaTypes.ObjectId,
-	     		unique : true,
-	     		index : true
-	     	}
+		Id: { type: String },
+		Name: { type: String },
+		PhaseAngle: { type: Number },
+		PowerFactor: { type: Number },
+		RmsCurrent: { type: Number },
+		RmsVoltage: { type: Number },
+		_id : {
+			type : SchemaTypes.ObjectId,
+			unique : true,
+			index : true
+		}
 	}],
-	 ReverseActivePower: { type: Number },
-	 VaallPhases: { type: Number }
+	ReverseActivePower: { type: Number },
+	VaallPhases: { type: Number }
 }, { collection: 'nesinstantpower' });
 
 var nesbill = mongoose.Schema({
@@ -175,6 +175,7 @@ var meterreads2 = mongoose.Schema({
 	meterId: { type: String },
 	lastread: { type: Date },
 	lastreadval: { type: Number },
+	type: { type: String },
 	date: { type: Date }
 }, { collection: 'meterreads2' });
 
@@ -207,7 +208,7 @@ var meterread = mongoose.Schema({
 
 
 
-mongoose.set('debug', true);
+mongoose.set('debug', false);
 
 var NesMeter = db.model('nesmeters', nesmeter);
 var NesMeterIndexed = db.model('nesmeters', nesmeter);
@@ -223,7 +224,6 @@ app.get('/cmlp/meterreadsapi/locations', function(req, res)
 
 	var meters = {};
 	var list = [];
-	var pending = 0;
 
 	var queryData = url.parse(req.url, true).query;
 
@@ -313,8 +313,6 @@ app.get('/cmlp/meterreadsapi/viewpq', function(req, res) {
 
 	var meterid = queryData.meterId;
 
-	var list = [];
-	
 	var start = new Date();
 	var end = new Date();
 	if (typeof queryData.start !== "undefined") {
@@ -366,15 +364,15 @@ app.get('/cmlp/meterreadsapi/viewpq', function(req, res) {
 	q = { Id: meterid };
 
 	console.log("viewpq q: " + JSON.stringify(q));
-	
+
 	NesMeter.findOne(q, function(err, nesmeter) {
 		if (!err && nesmeter) {
-		   processNesMeterInstantPowerData(nesmeter, start, end, req, res);	
+			processNesMeterInstantPowerData(nesmeter, start, end, req, res);	
 		}
 		else {
 			console.log("404 in viewpq: NesMeter.findOne: " + meterid);
 			return errors.e404();
-			
+
 		}
 	});
 });
@@ -463,19 +461,23 @@ app.get('/cmlp/meterreadsapi/view', function(req, res) {
 	});
 });
 
+app.get('/cmlp/meterreadsapi/lastreadcsv', function(req, res) {
+	return lastreadcsv(req, res);
+});
+
 app.get('/cmlp/meterreadsapi/neslastreadproc', function(req, res) {
 	//NesMeterIndexed.index("_id", {unique: true, dropDups: true});
-	
+
 	var meters = {};
 	var list = [];
 	var pending = 0;
-	
+
 	NesMeter.find().execFind( function (err, mreads) {
 		if (err || !mreads || !mreads.length) {
 			res.setHeader('Content-Type', 'application/json');
 			res.setHeader('Access-Control-Allow-Origin', '*');
 			res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
-			
+
 			res.json({
 				'status' : 'true', 'error' : err 
 			});
@@ -483,14 +485,14 @@ app.get('/cmlp/meterreadsapi/neslastreadproc', function(req, res) {
 		} else {
 			if (mreads && mreads.length) {
 				meters['list'] = list;
-				for (i=0;i<mreads.length; i++) {
+				for (var i=0;i<mreads.length; i++) {
 					pending++;
 					(function(curindex){
 						NesBill.find({DeviceId: mreads[curindex]._id}).sort({'DateTime':-1}).limit(1).execFind( function (err, mreads1) {
 							if (err || !mreads1.length) { pending--; } //return errors.e404(req, rsp, db);
 							else {
 								meters['list'] = list;
-								for (j=0; j<mreads1.length; j++) {
+								for (var j=0; j<mreads1.length; j++) {
 									var meter = mreads[curindex];
 									var lastreadDate = mreads1[j].DateTime;
 									meter.lastread = lastreadDate;
@@ -512,25 +514,25 @@ app.get('/cmlp/meterreadsapi/neslastreadproc', function(req, res) {
 								res.setHeader('Content-Type', 'application/json');
 								res.setHeader('Access-Control-Allow-Origin', '*');
 								res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
-								
+
 								res.json(
-									json );
+										json );
 								res.end();
 							}
 
 						});
 					})(i);
 
-					
-					
+
+
 				}
-				
-				
+
+
 				res.setHeader('Content-Type', 'application/json');
 				res.setHeader('Access-Control-Allow-Origin', '*');
 				res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
-				
-				
+
+
 			}
 		}
 	});
@@ -541,33 +543,33 @@ app.get('/cmlp/meterreadsapi/lastreadproc', function(req, res) {
 	var mlocs = {};
 	var meters = {};
 	var list = [];
-	
+
 	Meters.find().sort({'date': -1}).limit(1000).execFind( function (err, mreads) {
 		if (err || !mreads || !mreads.length) {
 			return errors.e404(req, res);
 			/*res.setHeader('Content-Type', 'application/json');
 			res.setHeader('Access-Control-Allow-Origin', '*');
 			res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
-			
+
 			res.json({
 				'status' : 'true', 'error' : err 
 			});
 			res.end();*/
 		} 
-		
+
 		meters['list'] = list;
 		var pending=0;
-		for (i=0; i<mreads.length; i++) {
+		for (var i=0; i<mreads.length; i++) {
 			pending++;
 			mlocs[mreads[i].meterId] = 'unknown';
-			
+
 			curmeter = mreads[i];
 			(function(curindex){
 				MeterDetail.find({meterId: mreads[curindex].meterId, 'type': {$exists: true}}).sort({'date':-1}).limit(1).execFind( function(err, mreads1) {
 					if (err || !mreads1.length) { pending--; } //return errors.e404(req, rsp, db);
 					else {
 						meters['list'] = list;
-						for (j=0; j<mreads1.length; j++) {
+						for (var j=0; j<mreads1.length; j++) {
 							var meter = mreads[curindex];
 							var lastreadDate = mreads1[j].date;
 							meter.lastread = lastreadDate;
@@ -593,15 +595,15 @@ app.get('/cmlp/meterreadsapi/lastreadproc', function(req, res) {
 						res.setHeader('Content-Type', 'application/json');
 						res.setHeader('Access-Control-Allow-Origin', '*');
 						res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
-						
+
 						res.json(
-							json );
+								json );
 						res.end();
 					}
 
 				});
 			})(i);		
-	}});
+		}});
 });
 
 
@@ -677,7 +679,7 @@ app.get('/cmlp/meterreadsapi', function(req, res) {
 					pending++;
 					mlocs[mreads[i].meterId] = 'unknown';
 					mtyps[mreads[i].meterId] = 'unknown';
-					var latlong = mreads[i].loc;
+					//var latlong = mreads[i].loc;
 
 					(function(curmeter, curindex) {
 						MeterLocations.findOne({ meterId: mreads[curindex].meterId}, function(err, mloc) {
@@ -712,24 +714,23 @@ app.get('/cmlp/meterreadsapi', function(req, res) {
 });
 
 
-// server startup routine
+//server startup routine
 var port = process.env.PORT || 5550;
 app.listen(port, function() {
 	console.log("Express server listening on port %d in %s mode", port,
 			app.settings.env);
 });
 
-// end server startup routing
+//end server startup routing
 
 
-// helper functions
+//helper functions
 function processErtMeterData(meterreads, mreads, meterlocations, res) {
 	var list =[];
 	var prevConsumption=0;
 	var mdelts = [];
 	var mdates = [];
 	var prevDay = '';
-	var prevDayObj = '';
 	var theDay = '';
 	var theDayObj = '';
 	var j=0;
@@ -756,6 +757,7 @@ function processErtMeterData(meterreads, mreads, meterlocations, res) {
 	var maxval = null;
 
 	var aggregate = 0;
+	var avg = 0;
 
 	for (var i=0; i<mdates.length; i++) {
 
@@ -772,7 +774,7 @@ function processErtMeterData(meterreads, mreads, meterlocations, res) {
 		}
 
 		aggregate += mdelts[i];
-		var avg = aggregate / mdelts.length;
+		avg = aggregate / mdelts.length;
 
 		list.push(cr);
 	}
@@ -806,12 +808,11 @@ function processNesMeterData(nesmeter, meterId, start, end, res) {
 			var mdelts = [];
 			var mdates = [];
 			var prevDay = '';
-			var prevDayObj;
 			var theDay = '';
 			var theDayObj;
 			var j=0;
 			console.log("mreads.length: " + mreads.length);
-
+			var curconsumption = 0;
 			for (var i =0; i<mreads.length; i++) {
 
 				var mreading = mreads[i];
@@ -821,7 +822,7 @@ function processNesMeterData(nesmeter, meterId, start, end, res) {
 
 					theDay = mreading.DateTime.toString().substr(0,3);
 					theDayObj = mreading.DateTime;
-					var curconsumption = mreading.SumOfTiers.SumForwardReverseActive;
+					curconsumption = mreading.SumOfTiers.SumForwardReverseActive;
 
 					if (theDay != prevDay) {
 						mdates[j] = theDayObj; //theDay+' '+(mreads[i].DateTime.getMonth()+1)+'/'+(mreads[i].DateTime.getDate());
@@ -858,7 +859,7 @@ function processNesMeterData(nesmeter, meterId, start, end, res) {
 				}
 
 				aggregate += mdelts[i];
-				var avg = aggregate / mdelts.length;
+				avg = aggregate / mdelts.length;
 
 				list.push(cr);
 			}
@@ -868,7 +869,7 @@ function processNesMeterData(nesmeter, meterId, start, end, res) {
 			var locobj = new Location(qholder.meter[0].Id, loc, "");
 			var consdata = new ConsumptionData(qholder.meter.Id, qholder.meter.Name, locobj, list, 
 					new Stats(new StatRecord(mindate, minval), new StatRecord(maxdate, maxval), avg));
-						res.setHeader('Content-Type', 'application/json');
+			res.setHeader('Content-Type', 'application/json');
 			res.setHeader('Access-Control-Allow-Origin', '*');
 			res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
 			res.json(
@@ -880,7 +881,7 @@ function processNesMeterData(nesmeter, meterId, start, end, res) {
 		else {
 			return errors.e404(req, rsp, db);
 		}
-	})
+	});
 };
 
 function processNesMeterInstantPowerData(nesmeter, start, end, req, res) {
@@ -894,14 +895,10 @@ function processNesMeterInstantPowerData(nesmeter, start, end, req, res) {
 			var freqlist =[];
 			var currentlist =[];
 			var voltagelist =[];
-			var prevConsumption=0;
-			var mdelts = [];
 			var mdates = [];
 			var frequencies = [];
 			var currents = [];
 			var voltages = [];
-			var prevDay = '';
-			var prevDayObj;
 			var theDay = '';
 			var theDayObj;
 			var j=0;
@@ -998,7 +995,7 @@ function processNesMeterInstantPowerData(nesmeter, start, end, req, res) {
 					new Stats(new StatRecord(minfreqdate, minfreqval), new StatRecord(maxfreqdate, maxfreqval), aggregatefreq/mdates.length),
 					new Stats(new StatRecord(mincurrdate, mincurrval), new StatRecord(maxcurrdate, maxcurrval), aggregatecurr/mdates.length),
 					new Stats(new StatRecord(minvoltdate, minvoltval), new StatRecord(maxvoltdate, maxvoltval), aggregatevolt/mdates.length));
-/*			var json = JSON.stringify(consdata);
+			/*			var json = JSON.stringify(consdata);
 
 			rsp.writeHead(200, { 'Content-Type': 'application/json', 'content-length':json.length,
 				'Access-Control-Allow-Origin' : '*', 'Access-Control-Allow-Headers': 'X-Requested-With'});
@@ -1009,7 +1006,7 @@ function processNesMeterInstantPowerData(nesmeter, start, end, req, res) {
 			res.setHeader('Access-Control-Allow-Origin', '*');
 			res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With');
 			res.json(
-				consdata
+					consdata
 			);
 		}
 		else {
@@ -1018,3 +1015,91 @@ function processNesMeterInstantPowerData(nesmeter, start, end, req, res) {
 
 };
 
+function lastreadcsv(req, res) {
+	var csvtitlerow = "Meter-Type, Meter-ID, Consumption Value, Date\n";
+	var data = csvtitlerow;
+	var currentlist = [];
+	var q = {};
+	var pending = 0;
+
+	Meters.find(q).sort({'lastread': -1}).execFind(function(err, mreads) {
+		if (err || !mreads.length) {
+			NesMeters.find(q).sort({'lastread':-1}).execFind(function(err, mreads) {
+				if (err || !mreads.length) {
+					res.setHeader('Content-Type', 'application/octet-stream');
+					res.setHeader('Content-disposition', 'attachment; filename=lastreads.csv');
+					res.send(data);
+				} else {
+					for (var i=0; i<mreads.length; i++) {
+						pending++;
+						var record = new SingleConsumptionRecord(mreads[i].Name, "electric", mreads[i].lastreadval, mreads[i].lastread );
+						var row = record.meterType + "," + record.meterId + "," + record.value + "," + record.date + "\n";
+						//console.log(row);
+						data = data.concat(row);
+
+						if (i == (mreads.length -1)) { // complete
+							res.setHeader('Content-Type', 'application/octet-stream');
+							res.setHeader('Content-disposition', 'attachment; filename=lastreads.csv');
+							res.send(data);
+							res.end();
+						}
+						pending--;
+					};
+				};
+			});
+
+		} else {
+			for (var i=0; i<mreads.length; i++) {
+				pending++;
+				var metertypedescr = "unknown";
+
+				if ((mreads[i].type == 5) || (mreads[i].type == 4) || (mreads[i].type == 7)) {
+					metertypedescr = "electric";
+				} else if (mreads[i].type == 3){ 
+					metertypedescr = "water";
+				} else if (mreads[i].type == 2) {
+					metertypedescr = "gas";
+				} else {
+					metertypedescr = "unknown (" + mreads[i].type + ")";
+				}
+
+				var record = new SingleConsumptionRecord(mreads[i].meterId, metertypedescr, mreads[i].lastreadval, mreads[i].lastread );
+
+				currentlist.push(record);
+				var row = record.meterType + "," + record.meterId + "," + record.value + "," + record.date + "\n";
+				//console.log(row);
+				data = data.concat(row);
+
+				if (i == (mreads.length -1)) { // complete
+
+					NesMeter.find(q).sort({'lastread': -1}).execFind(function(err, mreads) {
+						if (err || !mreads.length) {
+							res.setHeader('Content-Type', 'application/octet-stream');
+							res.setHeader('Content-disposition', 'attachment; filename=lastreads.csv');
+							res.send(data);
+							res.end();
+						} else {
+							for (var i=0; i<mreads.length; i++) {
+								pending++;
+								var record = new SingleConsumptionRecord(mreads[i].Name, "electric", mreads[i].lastreadval, mreads[i].lastread );
+								var row = record.meterType + "," + record.meterId + "," + record.value + "," + record.date + "\n";
+								//console.log(row);
+								data = data.concat(row);
+
+								if (i == (mreads.length -1)) { // complete
+									res.setHeader('Content-Type', 'application/octet-stream');
+									res.setHeader('Content-disposition', 'attachment; filename=lastreads.csv');
+									res.send(data);
+									res.end();
+								}
+								pending--;
+							}
+						}
+					});
+				}
+				pending--;
+			};
+		};
+	});
+
+};
