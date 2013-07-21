@@ -715,7 +715,7 @@ app.get('/cmlp/meterreadsapi', function(req, res) {
 
 
 //server startup routine
-var port = process.env.PORT || 5550;
+var port = process.env.PORT || 1337;
 app.listen(port, function() {
 	console.log("Express server listening on port %d in %s mode", port,
 			app.settings.env);
