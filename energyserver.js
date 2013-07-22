@@ -868,7 +868,8 @@ function processNesMeterData(nesmeter, meterId, start, end, res) {
 			console.log("qholder: " + JSON.stringify(qholder.meter));
 			var loc = [qholder.meter[0].Loc.Latitude, qholder.meter[0].Loc.Longitude];
 			var locobj = new Location(qholder.meter[0].Id, loc, "");
-			var consdata = new ConsumptionData(qholder.meter.Id, qholder.meter.Name, locobj, list, 
+			console.log(qholder.meter.Name);
+			var consdata = new ConsumptionData(qholder.meter[0].Id, qholder.meter[0].Name, locobj, list, 
 					new Stats(new StatRecord(mindate, minval), new StatRecord(maxdate, maxval), avg));
 			res.setHeader('Content-Type', 'application/json');
 			res.setHeader('Access-Control-Allow-Origin', '*');
