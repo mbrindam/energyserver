@@ -146,7 +146,7 @@ var nesbill = mongoose.Schema({
 
 var nesmeter = mongoose.Schema({
 	_id : {
-		type : SchemaTypes.ObjectId,
+		type : String,
 		unique : true,
 		index : true
 	},
@@ -487,8 +487,9 @@ app.get('/cmlp/meterreadsapi/neslastreadproc', function(req, res) {
 				meters['list'] = list;
 				for (var i=0;i<mreads.length; i++) {
 					pending++;
-					(function(curindex){
-						NesBill.find({DeviceId: mreads[curindex]._id}).sort({'DateTime':-1}).limit(1).execFind( function (err, mreads1) {
+					console.log("processing deviceId: " + mreads[i]._id);
+					(function(curindex, deviceId){
+						NesBill.find({DeviceId: deviceId}).sort({'DateTime':-1}).limit(1).execFind( function (err, mreads1) {
 							if (err || !mreads1.length) { pending--; } //return errors.e404(req, rsp, db);
 							else {
 								meters['list'] = list;
@@ -521,7 +522,7 @@ app.get('/cmlp/meterreadsapi/neslastreadproc', function(req, res) {
 							}
 
 						});
-					})(i);
+					})(i, mreads[i]._id);
 
 
 
@@ -879,7 +880,7 @@ function processNesMeterData(nesmeter, meterId, start, end, res) {
 
 		}
 		else {
-			return errors.e404(req, rsp, db);
+			return errors.e404(req, res, db);
 		}
 	});
 };
