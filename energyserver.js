@@ -881,7 +881,7 @@ function processNesMeterData(nesmeter, meterId, start, end, res) {
 
 		}
 		else {
-			return errors.e404(req, res, db);
+			return errors.e404(res, db);
 		}
 	});
 };
